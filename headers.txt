@@ -1,0 +1,25 @@
+HTTP/1.1 500 Internal Server Error
+Content-Length: 174
+Content-Type: application/json
+X-Vcap-Request-Id: 2dbcc3b2-d7e9-410e-6877-5b7cd958290c
+Date: Sun, 17 Aug 2025 15:02:21 GMT
+X-Content-Type-Options: nosniff'
+X-Frame-Options: ALLOW-FROM https://*.pole-emploi.fr
+Set-Cookie: TS01595251=01b3abf0a22a16fbba1c2ac7b7573f568a78e299324515f98979a9e9ab74f62318459cb5205f5ed4925585e1bb4b323c49f4b479f8; Path=/; Domain=.gw017-apigatewaypeio-gateway-redis-prod.apps.tas-prod.pole-emploi.intra; Secure; HttpOnly
+Vary: Accept-Encoding
+
+FT_TOKEN_URL="https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
+CLIENT_ID="PAR_umojarecrutement_edee27a4d0e59fb753d0f1e68525beebed11c0afc0db51e62d381a8194fa91d2"
+CLIENT_SECRET="ee98e21f096910b0bd37de543c080481d6b9cb1afb854888be745c644e02cfef"
+FT_SCOPE="o2dsoffre api_offresdemploiv2"
+
+TOKEN=$(curl -s -X POST \
+  "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&scope=api_offresdemploiv2" \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+echo $TOKEN
+
+
+SELECT COUNT(*) FROM offres WHERE provider = 'france_travail';

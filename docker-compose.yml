@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: .
+    container_name: umoja-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    # ❌ Volume inutile pour la clé publique
+    # volumes:
+    #   - ./src/auth:/app/src/auth:ro
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: umoja-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    env_file:
+      - ../frontend/.env.docker
+    restart: unless-stopped

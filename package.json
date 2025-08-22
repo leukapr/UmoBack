@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.51.0",
+    "axios": "^1.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.7",
+    "jwks-rsa": "^3.2.0",
+    "multer": "^2.0.2"
+  },
+  "scripts": {
+    "test": "jest",
+    "sync:ft": "node scripts/sync-france-travail.js --days=14",
+    "audit:ft": "node scripts/audit-france-travail.js --since=2025-08-01 --until=2025-08-13"
+  }
+}
