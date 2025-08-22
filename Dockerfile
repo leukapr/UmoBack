@@ -1,15 +1,17 @@
-# ⚙️ Utilise une image Node.js légère
-FROM node:20-slim
-
-# 📁 Dossier de travail dans le conteneur
+# Dépendances prod
+FROM node:20-alpine AS deps
 WORKDIR /app
-
-# 📦 Installation des dépendances
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
-# 📁 Copie tout le reste du code
+# Runner
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# 🚀 Lance l'application
+# (facultatif) si tu veux un healthcheck via curl, installe-le avant USER
+# RUN apk add --no-cache curl
+USER node
+EXPOSE 3000
 CMD ["node", "src/app.js"]

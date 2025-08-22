@@ -15,8 +15,12 @@
     "multer": "^2.0.2"
   },
   "scripts": {
+    "start": "node src/app.js",
     "test": "jest",
     "sync:ft": "node scripts/sync-france-travail.js --days=14",
     "audit:ft": "node scripts/audit-france-travail.js --since=2025-08-01 --until=2025-08-13"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

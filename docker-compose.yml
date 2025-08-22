@@ -1,25 +1,38 @@
-services:
-  backend:
-    build:
-      context: .
-    container_name: umoja-backend
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    restart: unless-stopped
-    # ❌ Volume inutile pour la clé publique
-    # volumes:
-    #   - ./src/auth:/app/src/auth:ro
+version: "3.9"
 
-  frontend:
+services:
+  api:
     build:
-      context: ../frontend
-    container_name: umoja-frontend
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
+      context: ./backend
     env_file:
-      - ../frontend/.env.docker
+      - ./backend/.env.api
+    expose:
+      - "3000"
+    # Healthcheck sans curl (Node 20 a fetch intégré)
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://localhost:3000/api/__health'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Le front construit ses URLs d'appel avec '/api/...' dans le code,
+        # donc on met la base à "/" (le proxy se charge du /api → api:3000)
+        VITE_API_URL: /
+        VITE_PUBLIC_URL: http://localhost:8080
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
