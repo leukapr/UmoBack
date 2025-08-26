@@ -1,4 +1,3 @@
-// src/routes/users.js
 import express from "express";
 import multer from "multer";
 import { supabaseAdmin as supabase } from "../lib/supabaseClient.js";
@@ -57,7 +56,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 });
 
 /**
- * 🔍 GET /api/users/:id — Profil par ID (authentifié et restreint à soi-même)
+ * 🔍 GET /api/users/:id — Profil par ID (authentifié et restreint)
  */
 router.get("/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
@@ -127,7 +126,7 @@ router.patch("/:id", authMiddleware, async (req, res) => {
         .status(422)
         .json({ error: "Numéro invalide (10 chiffres attendus)." });
     }
-    update.telephone = normalized || null; // null si effacé
+    update.telephone = normalized || null; // null autorisé si l’utilisateur efface
   }
 
   if (!Object.keys(update).length) {
@@ -148,14 +147,12 @@ router.patch("/:id", authMiddleware, async (req, res) => {
       const code = error.code || "";
       const msg = error.message || "";
 
-      // 23505 = unique_violation
       if (code === "23505" || /duplicate key value|unique/i.test(msg)) {
         if (/unique_telephone/i.test(msg)) {
           return res.status(409).json({ error: "Ce numéro est déjà utilisé." });
         }
         return res.status(409).json({ error: "Contrainte d'unicité violée." });
       }
-      // 23514 = check_violation
       if (code === "23514" || /telephone_format/i.test(msg)) {
         return res
           .status(422)
@@ -256,7 +253,7 @@ router.delete("/:id/cv", authMiddleware, async (req, res) => {
         .remove([path]);
       if (delErr) {
         console.error("❌ Suppression fichier:", delErr.message);
-        // on continue quand même pour nettoyer la base
+        // On continue malgré tout pour nettoyer la base
       }
     }
 
