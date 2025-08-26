@@ -84,14 +84,37 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// Exemple de limiteur plus strict pour un endpoint login si besoin
-// const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-
-/* ---------------- Health ---------------- */
+/* ---------------- Health & debug ---------------- */
+// Tu avais déjà ceux-ci :
 app.get("/api/ping", (_req, res) => res.send("pong"));
 app.get("/api/__health", (_req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
+
+// On ajoute des alias simples pour vérifier le déploiement :
+app.get("/health", (_req, res) => res.json({ ok: true, path: "/health" }));
+app.get("/api/health", (_req, res) =>
+  res.json({ ok: true, path: "/api/health" })
+);
+
+// Introspection des routes (debug temporaire)
+app.get("/api/_routes", (_req, res) => {
+  const list = [];
+  const scan = (stack, prefix = "") => {
+    for (const layer of stack) {
+      if (layer.route) {
+        const methods = Object.keys(layer.route.methods)
+          .join(",")
+          .toUpperCase();
+        list.push(`${methods} ${prefix}${layer.route.path}`);
+      } else if (layer.name === "router" && layer.handle?.stack) {
+        scan(layer.handle.stack, prefix);
+      }
+    }
+  };
+  scan(app._router.stack);
+  res.json(list.sort());
+});
 
 /* ---------------- Routes publiques ---------------- */
 app.use("/api/filters", filtersRoutes);
@@ -115,11 +138,12 @@ app.use("/api/geo", geoRouter);
 /* ---------------- Routes protégées ---------------- */
 app.use("/api/candidatures", authMiddleware, candidaturesRoutes);
 app.use("/api/files", filesRoutes);
-app.use("/api/users", usersRoutes);
+
+// 🔑 utilisateurs : on MONTE le routeur sur 2 préfixes pour survivre aux réécritures proxy
+app.use(["/api/users", "/users"], usersRoutes);
+
 app.use("/api/favorites", authMiddleware, favoritesRoutes);
 app.use("/api/newsletters", newslettersRoutes); // ⬅️ ici
-
-// Candidatures spontanées : POST public / GET protégé dans le router
 app.use("/api/spontanees", spontaneesRoutes);
 
 /* ---------------- 404 & error handler ---------------- */
