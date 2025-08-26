@@ -17,6 +17,7 @@ import franceTravailRoutes from "./routes/franceTravail.js";
 import geoRouter from "./routes/geo.js";
 import newslettersRoutes from "./routes/newsletters.js";
 import offresRoutes from "./routes/offres.js";
+import postulerRoutes from "./routes/postuler.js";
 import searchRoutes from "./routes/search.js";
 import spontaneesRoutes from "./routes/spontanees.js";
 import usersRoutes from "./routes/users.js";
@@ -145,6 +146,7 @@ app.use(["/api/users", "/users"], usersRoutes);
 app.use("/api/favorites", authMiddleware, favoritesRoutes);
 app.use("/api/newsletters", newslettersRoutes); // ⬅️ ici
 app.use("/api/spontanees", spontaneesRoutes);
+app.use("/api/postuler", postulerRoutes); // postuler à une offre (offre_id requis)
 
 /* ---------------- 404 & error handler ---------------- */
 app.use((_req, res) => {
