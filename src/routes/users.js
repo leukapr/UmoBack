@@ -7,6 +7,24 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+/* ---------------------------- Helpers ---------------------------- */
+function normalizePhone(input = "") {
+  // garde uniquement les chiffres, tronque à 10
+  return String(input).replace(/\D+/g, "").slice(0, 10);
+}
+
+function getStoragePathFromPublicUrl(publicUrl) {
+  // public:  https://<proj>.supabase.co/storage/v1/object/public/cvs/<path>
+  // retourne: <path>
+  if (!publicUrl) return null;
+  const marker = "/storage/v1/object/public/cvs/";
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return publicUrl.slice(idx + marker.length);
+}
+
+/* ------------------------------ Routes ------------------------------ */
+
 /**
  * ✅ GET /api/users/me — Profil utilisateur actuel (via token)
  */
@@ -20,7 +38,9 @@ router.get("/me", authMiddleware, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("user_profiles")
-      .select("id, email, prenom, nom, role, telephone, cv_url")
+      .select(
+        "id, email, prenom, nom, role, telephone, cv_url, avatar_url, updated_at, created_at"
+      )
       .eq("id", userId)
       .single();
 
@@ -54,7 +74,9 @@ router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("user_profiles")
-      .select("id, email, prenom, nom, avatar_url, role, cv_url")
+      .select(
+        "id, email, prenom, nom, telephone, avatar_url, role, cv_url, updated_at, created_at"
+      )
       .eq("id", id)
       .single();
 
@@ -67,6 +89,85 @@ router.get("/:id", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("❌ Erreur serveur :", err.message);
     res.status(500).json({ error: "Erreur serveur." });
+  }
+});
+
+/**
+ * ✏️ PATCH /api/users/:id — Mettre à jour prénom/nom/téléphone
+ *  - Email NON modifiable
+ *  - Téléphone: 10 chiffres (constraint 'telephone_format')
+ */
+router.patch("/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "Authentification requise." });
+  }
+  if (id !== req.user.id) {
+    return res.status(403).json({ error: "Accès interdit." });
+  }
+
+  // Interdire toute tentative de modifier l'email
+  if ("email" in req.body) {
+    return res
+      .status(400)
+      .json({ error: "Le champ email n'est pas modifiable." });
+  }
+
+  const update = {};
+  if (typeof req.body.prenom === "string")
+    update.prenom = req.body.prenom.trim();
+  if (typeof req.body.nom === "string") update.nom = req.body.nom.trim();
+
+  if (typeof req.body.telephone === "string") {
+    const normalized = normalizePhone(req.body.telephone);
+    if (normalized && normalized.length !== 10) {
+      return res
+        .status(422)
+        .json({ error: "Numéro invalide (10 chiffres attendus)." });
+    }
+    update.telephone = normalized || null; // null autorisé si l'utilisateur efface
+  }
+
+  if (!Object.keys(update).length) {
+    return res.status(400).json({ error: "Aucune modification." });
+  }
+
+  update.updated_at = new Date().toISOString();
+
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update(update)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      const code = error.code || "";
+      const msg = error.message || "";
+
+      if (code === "23505" || /duplicate key value|unique/i.test(msg)) {
+        // unicité (ex: unique_telephone)
+        if (/unique_telephone/i.test(msg)) {
+          return res.status(409).json({ error: "Ce numéro est déjà utilisé." });
+        }
+        return res.status(409).json({ error: "Contrainte d'unicité violée." });
+      }
+      if (code === "23514" || /telephone_format/i.test(msg)) {
+        return res
+          .status(422)
+          .json({ error: "Numéro invalide (10 chiffres attendus)." });
+      }
+
+      console.error("❌ Update profil:", error);
+      return res.status(500).json({ error: "Erreur serveur." });
+    }
+
+    return res.json(data);
+  } catch (err) {
+    console.error("❌ Exception PATCH:", err);
+    return res.status(500).json({ error: "Erreur serveur." });
   }
 });
 
@@ -105,7 +206,7 @@ router.post(
 
       const { error: updateError } = await supabase
         .from("user_profiles")
-        .update({ cv_url: publicUrl })
+        .update({ cv_url: publicUrl, updated_at: new Date().toISOString() })
         .eq("id", id);
 
       if (updateError) {
@@ -122,5 +223,58 @@ router.post(
     }
   }
 );
+
+/**
+ * 🗑️ DELETE /api/users/:id/cv — Supprimer le CV du storage et du profil
+ */
+router.delete("/:id/cv", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.user?.id || id !== req.user.id) {
+    return res.status(403).json({ error: "Accès non autorisé." });
+  }
+
+  try {
+    // Récupérer l'URL actuelle
+    const { data: prof, error: readErr } = await supabase
+      .from("user_profiles")
+      .select("cv_url")
+      .eq("id", id)
+      .single();
+
+    if (readErr) {
+      console.error("❌ Lecture profil:", readErr.message);
+      return res.status(500).json({ error: "Erreur serveur." });
+    }
+
+    const path = getStoragePathFromPublicUrl(prof?.cv_url);
+    if (path) {
+      const { error: delErr } = await supabase.storage
+        .from("cvs")
+        .remove([path]);
+      if (delErr) {
+        console.error("❌ Suppression fichier:", delErr.message);
+        // On continue malgré tout pour nettoyer la base
+      }
+    }
+
+    const { error: updErr } = await supabase
+      .from("user_profiles")
+      .update({ cv_url: null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (updErr) {
+      console.error("❌ Mise à jour profil:", updErr.message);
+      return res
+        .status(500)
+        .json({ error: "Impossible de mettre à jour le profil." });
+    }
+
+    return res.status(200).json({ cv_url: null });
+  } catch (err) {
+    console.error("❌ Exception DELETE CV:", err.message);
+    return res.status(500).json({ error: "Erreur interne." });
+  }
+});
 
 export default router;
